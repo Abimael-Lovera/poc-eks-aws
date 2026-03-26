@@ -1,0 +1,112 @@
+# Karpenter NodePool and EC2NodeClass for AWS EKS
+# Defines how Karpenter provisions and manages nodes
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: default
+spec:
+  # Template for provisioned nodes
+  template:
+    metadata:
+      labels:
+        node-type: karpenter
+    spec:
+      # Reference to EC2NodeClass
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+      
+      # Node requirements
+      requirements:
+        # Instance types - t3 family for cost efficiency
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values:
+            - t3.medium
+            - t3.large
+            - t3.xlarge
+        
+        # Capacity type - prefer spot for cost savings
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values:
+            - spot
+            - on-demand
+        
+        # Architecture
+        - key: kubernetes.io/arch
+          operator: In
+          values:
+            - amd64
+        
+        # Availability zones
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values:
+            - us-east-1a
+            - us-east-1b
+      
+      # Expire nodes after 24 hours (forces refresh)
+      expireAfter: 24h
+  
+  # Resource limits to prevent runaway costs
+  limits:
+    cpu: "100"        # Max 100 vCPUs across all nodes
+    memory: "200Gi"   # Max 200GB memory across all nodes
+  
+  # Disruption settings
+  disruption:
+    # Consolidate underutilized nodes
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 1m
+    
+    # Budget for disruptions
+    budgets:
+      - nodes: "20%"  # Max 20% of nodes can be disrupted at once
+
+---
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  # AMI family - use latest EKS optimized AMI
+  amiFamily: AL2023
+  
+  # IAM role for nodes (created by Terraform)
+  # Replace with actual role name from terraform output
+  role: "poc-eks-dev-karpenter-node"
+  
+  # Subnets - discovered by tags
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "poc-eks-dev"
+  
+  # Security groups - discovered by tags
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "poc-eks-dev"
+  
+  # Block device mappings
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 50Gi
+        volumeType: gp3
+        encrypted: true
+        deleteOnTermination: true
+  
+  # Instance metadata options (IMDSv2)
+  metadataOptions:
+    httpEndpoint: enabled
+    httpProtocolIPv6: disabled
+    httpPutResponseHopLimit: 1
+    httpTokens: required  # Require IMDSv2
+  
+  # Tags for instances
+  tags:
+    Name: "poc-eks-dev-karpenter-node"
+    Environment: dev
+    ManagedBy: karpenter

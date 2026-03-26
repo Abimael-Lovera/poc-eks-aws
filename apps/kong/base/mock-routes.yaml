@@ -1,0 +1,148 @@
+# Kong Mock Routes Configuration
+# These CRDs create mocked API endpoints for testing
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mock-services
+---
+# Health check service (returns static response)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-health
+  namespace: mock-services
+  annotations:
+    konghq.com/plugins: health-response
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# Mock API service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-api
+  namespace: mock-services
+  annotations:
+    konghq.com/plugins: mock-response
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# Echo service (returns request info)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-echo
+  namespace: mock-services
+  annotations:
+    konghq.com/plugins: echo-response
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# Plugin: Health endpoint response
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: health-response
+  namespace: mock-services
+config:
+  status_code: 200
+  content_type: application/json
+  body: '{"status":"healthy","timestamp":"{{now}}","service":"poc-eks-aws"}'
+plugin: request-termination
+---
+# Plugin: Mock API response
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: mock-response
+  namespace: mock-services
+config:
+  status_code: 200
+  content_type: application/json
+  body: '{"status":"ok","message":"mock response","data":{"id":1,"name":"test"}}'
+plugin: request-termination
+---
+# Plugin: Echo response (simplified - returns static echo info)
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: echo-response
+  namespace: mock-services
+config:
+  status_code: 200
+  content_type: application/json
+  body: '{"echo":true,"info":"This endpoint echoes request information","method":"GET"}'
+plugin: request-termination
+---
+# Ingress: /health route
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: health-route
+  namespace: mock-services
+  annotations:
+    konghq.com/strip-path: "false"
+    konghq.com/plugins: health-response
+spec:
+  ingressClassName: kong
+  rules:
+    - http:
+        paths:
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: mock-health
+                port:
+                  number: 80
+---
+# Ingress: /api/mock route
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mock-api-route
+  namespace: mock-services
+  annotations:
+    konghq.com/strip-path: "false"
+    konghq.com/plugins: mock-response
+spec:
+  ingressClassName: kong
+  rules:
+    - http:
+        paths:
+          - path: /api/mock
+            pathType: Prefix
+            backend:
+              service:
+                name: mock-api
+                port:
+                  number: 80
+---
+# Ingress: /api/echo route
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: echo-route
+  namespace: mock-services
+  annotations:
+    konghq.com/strip-path: "false"
+    konghq.com/plugins: echo-response
+spec:
+  ingressClassName: kong
+  rules:
+    - http:
+        paths:
+          - path: /api/echo
+            pathType: Prefix
+            backend:
+              service:
+                name: mock-echo
+                port:
+                  number: 80

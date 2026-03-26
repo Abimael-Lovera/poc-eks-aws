@@ -1,0 +1,93 @@
+# Kong Helm values for AWS EKS
+# Configured for ALB Ingress Controller with instance mode
+
+ingressController:
+  enabled: true
+  installCRDs: true
+  
+  # Use ALB ingress class
+  ingressClass: alb
+  
+  # Watch all namespaces
+  watchNamespaces: []
+
+gateway:
+  enabled: true
+  
+  # Service configuration for ALB instance mode
+  proxy:
+    enabled: true
+    type: NodePort
+    http:
+      enabled: true
+      nodePort: 30080
+    tls:
+      enabled: true
+      nodePort: 30443
+    
+    # Annotations for ALB Ingress
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "external"
+      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "instance"
+      service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+  
+  # Admin API - internal only in production
+  admin:
+    enabled: true
+    type: ClusterIP
+    http:
+      enabled: true
+
+  # Production-ready resources
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2
+      memory: 2Gi
+  
+  # Autoscaling
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+  # Environment
+  env:
+    database: "off"
+    plugins: bundled
+    proxy_access_log: /dev/stdout
+    admin_access_log: /dev/stdout
+    proxy_error_log: /dev/stderr
+    admin_error_log: /dev/stderr
+    
+    # Performance tuning
+    nginx_worker_processes: auto
+    upstream_keepalive_pool_size: 100
+
+  # Pod disruption budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # Affinity - spread across AZs
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - kong
+            topologyKey: topology.kubernetes.io/zone
+
+enterprise:
+  enabled: false
+
+postgresql:
+  enabled: false

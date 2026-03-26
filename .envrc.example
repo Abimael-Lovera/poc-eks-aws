@@ -1,0 +1,19 @@
+# POC EKS AWS - Environment Configuration
+# Copy this file to .envrc and customize for your environment
+# Then run: direnv allow
+
+# AWS Configuration
+export AWS_PROFILE="your-aws-profile"
+export AWS_REGION="us-east-1"
+
+# Environment (dev, staging, prod)
+export ENVIRONMENT="dev"
+
+# Cluster name (auto-generated if not set)
+export CLUSTER_NAME="poc-eks-${ENVIRONMENT}"
+
+# Optional: Terraform log level (TRACE, DEBUG, INFO, WARN, ERROR)
+# export TF_LOG="INFO"
+
+# Optional: Disable Terraform color output
+# export TF_CLI_ARGS="-no-color"

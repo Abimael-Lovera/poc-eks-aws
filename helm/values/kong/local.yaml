@@ -1,0 +1,65 @@
+# Kong Helm values for local development (Kind cluster)
+# Optimized for local testing with minimal resources
+
+# Use the ingress controller with gateway
+ingressController:
+  enabled: true
+  installCRDs: true
+  
+  # Admin API config
+  adminApi:
+    enabled: true
+
+# Gateway (Kong proxy)
+gateway:
+  enabled: true
+  
+  # Proxy service - NodePort for Kind port mapping
+  proxy:
+    enabled: true
+    type: NodePort
+    http:
+      enabled: true
+      nodePort: 30080
+    tls:
+      enabled: true
+      nodePort: 30443
+  
+  # Admin service - NodePort for local access
+  admin:
+    enabled: true
+    type: NodePort
+    http:
+      enabled: true
+      nodePort: 30001
+
+  # Minimal resources for local dev
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Environment variables
+  env:
+    # Database-less mode (declarative config)
+    database: "off"
+    
+    # Enable request termination plugin for mocking
+    plugins: bundled
+    
+    # Logging
+    proxy_access_log: /dev/stdout
+    admin_access_log: /dev/stdout
+    proxy_error_log: /dev/stderr
+    admin_error_log: /dev/stderr
+
+# Disable enterprise features
+enterprise:
+  enabled: false
+
+# Disable PostgreSQL (using DB-less mode)
+postgresql:
+  enabled: false
