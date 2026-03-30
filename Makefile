@@ -85,13 +85,13 @@ aws-init:
 aws-plan:
 	@echo "$(BLUE)▶ Planning AWS infrastructure...$(NC)"
 	@cd $(TF_DIR) && \
-		AWS_PROFILE=$(AWS_PROFILE) terraform init && \
+		AWS_PROFILE=$(AWS_PROFILE) terraform init -backend-config=../../state/backend.conf && \
 		AWS_PROFILE=$(AWS_PROFILE) terraform plan
 
 aws-apply:
 	@echo "$(GREEN)▶ Applying AWS infrastructure...$(NC)"
 	@cd $(TF_DIR) && \
-		AWS_PROFILE=$(AWS_PROFILE) terraform init && \
+		AWS_PROFILE=$(AWS_PROFILE) terraform init -backend-config=../../state/backend.conf && \
 		AWS_PROFILE=$(AWS_PROFILE) terraform apply
 
 aws-destroy:
@@ -108,18 +108,18 @@ aws-destroy:
 prod-init:
 	@echo "$(GREEN)▶ Initializing Terraform for prod...$(NC)"
 	@cd $(TF_PROD_DIR) && \
-		AWS_PROFILE=$(AWS_PROFILE) terraform init
+		AWS_PROFILE=$(AWS_PROFILE) terraform init -backend-config=../../state/backend.conf
 
 prod-plan:
 	@echo "$(BLUE)▶ Planning prod infrastructure...$(NC)"
 	@cd $(TF_PROD_DIR) && \
-		AWS_PROFILE=$(AWS_PROFILE) terraform init && \
+		AWS_PROFILE=$(AWS_PROFILE) terraform init -backend-config=../../state/backend.conf && \
 		AWS_PROFILE=$(AWS_PROFILE) terraform plan
 
 prod-apply:
 	@echo "$(GREEN)▶ Applying prod infrastructure...$(NC)"
 	@cd $(TF_PROD_DIR) && \
-		AWS_PROFILE=$(AWS_PROFILE) terraform init && \
+		AWS_PROFILE=$(AWS_PROFILE) terraform init -backend-config=../../state/backend.conf && \
 		AWS_PROFILE=$(AWS_PROFILE) terraform apply
 
 prod-destroy:
