@@ -1,8 +1,17 @@
-# Proposal: Project Structure Refactor
+# Project Structure Refactor
+
+> **Status:** ✅ IMPLEMENTED  
+> **Implementation Date:** 2026-03-29  
+> **Commit:** 8cffeb2  
+> **ADR:** [ADR-005: Project Structure Reorganization](../adr/005-project-structure.md)
+
+---
+
+**Original Proposal Metadata:**
 
 **Change Name:** `project-structure-refactor`  
 **Date:** 2026-03-29  
-**Status:** Draft  
+**Status:** Implemented  
 **Author:** Platform Team  
 
 ---
