@@ -126,10 +126,13 @@ module "eks" {
     kube_proxy         = true
     vpc_cni            = true
     pod_identity_agent = true
+    ebs_csi            = true
     alb_controller     = false # Deployed as separate module below
     karpenter          = false # Deployed as separate module below
     metrics_server     = true
   }
+
+  ebs_csi_role_arn = module.iam_irsa.roles["ebs_csi"].arn
 
   tags = local.tags
 
@@ -148,6 +151,19 @@ module "iam_irsa" {
   environment  = var.environment
 
   roles = merge(
+    # EBS CSI Driver IRSA role (always created - essential for persistent storage)
+    {
+      ebs_csi = {
+        description = "EBS CSI Driver IRSA Role"
+        trust_policy = templatefile("${path.module}/policies/trust/irsa.json.tpl", {
+          oidc_provider_arn = module.eks.oidc_provider_arn
+          oidc_provider_url = replace(module.eks.oidc_provider_url, "https://", "")
+          namespace         = "kube-system"
+          service_account   = "ebs-csi-controller-sa"
+        })
+        policy_json = file("${path.module}/policies/ebs-csi.json")
+      }
+    },
     # ALB Controller IRSA role (always created)
     {
       alb_controller = {
@@ -173,6 +189,32 @@ module "iam_irsa" {
         })
         policy_json = file("${path.module}/policies/karpenter-controller.json")
       }
+    } : {},
+    # KEDA IRSA role (conditional)
+    var.enable_keda ? {
+      keda = {
+        description = "KEDA Operator IRSA Role"
+        trust_policy = templatefile("${path.module}/policies/trust/irsa.json.tpl", {
+          oidc_provider_arn = module.eks.oidc_provider_arn
+          oidc_provider_url = replace(module.eks.oidc_provider_url, "https://", "")
+          namespace         = "keda"
+          service_account   = "keda-operator"
+        })
+        policy_json = file("${path.module}/policies/keda.json")
+      }
+    } : {},
+    # External Secrets IRSA role (conditional)
+    var.enable_external_secrets ? {
+      external_secrets = {
+        description = "External Secrets Operator IRSA Role"
+        trust_policy = templatefile("${path.module}/policies/trust/irsa.json.tpl", {
+          oidc_provider_arn = module.eks.oidc_provider_arn
+          oidc_provider_url = replace(module.eks.oidc_provider_url, "https://", "")
+          namespace         = "external-secrets"
+          service_account   = "external-secrets"
+        })
+        policy_json = file("${path.module}/policies/external-secrets.json")
+      }
     } : {}
   )
 
@@ -182,7 +224,7 @@ module "iam_irsa" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. HELM ADDONS (ALB Controller, Karpenter)
+# 6. HELM ADDONS (ALB Controller, Karpenter, KEDA, External Secrets)
 # ─────────────────────────────────────────────────────────────────────────────
 # These are deployed AFTER iam_irsa to avoid circular dependencies.
 
@@ -210,6 +252,34 @@ module "karpenter" {
   controller_iam_role_arn       = module.iam_irsa.roles["karpenter_controller"].arn
   node_iam_role_name            = split("/", module.iam_base.roles["karpenter_node"].arn)[1]
   chart_version                 = "1.0.1"
+
+  tags = local.tags
+
+  depends_on = [module.eks, module.iam_irsa]
+}
+
+module "keda" {
+  count  = var.enable_keda ? 1 : 0
+  source = "../../modules/compute/eks/addons/keda"
+
+  cluster_name      = local.cluster_name
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  iam_role_arn      = module.iam_irsa.roles["keda"].arn
+  chart_version     = "2.13.0"
+
+  tags = local.tags
+
+  depends_on = [module.eks, module.iam_irsa]
+}
+
+module "external_secrets" {
+  count  = var.enable_external_secrets ? 1 : 0
+  source = "../../modules/compute/eks/addons/external-secrets"
+
+  cluster_name      = local.cluster_name
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  iam_role_arn      = module.iam_irsa.roles["external_secrets"].arn
+  chart_version     = "0.9.11"
 
   tags = local.tags
 

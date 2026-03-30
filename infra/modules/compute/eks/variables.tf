@@ -57,9 +57,16 @@ variable "addons" {
     kube_proxy         = optional(bool, true)
     vpc_cni            = optional(bool, true)
     pod_identity_agent = optional(bool, true)
+    ebs_csi            = optional(bool, true)
     metrics_server     = optional(bool, false)
   })
   default = {}
+}
+
+variable "ebs_csi_role_arn" {
+  description = "IAM role ARN for EBS CSI driver (required if ebs_csi addon is enabled)"
+  type        = string
+  default     = null
 }
 
 variable "tags" {

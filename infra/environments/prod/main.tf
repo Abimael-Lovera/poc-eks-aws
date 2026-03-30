@@ -125,38 +125,17 @@ module "eks" {
     }
   }
 
-  # Karpenter node role ARN (top-level parameter)
-  karpenter_node_role_arn = var.enable_karpenter ? module.iam_base.roles["karpenter_node"].arn : null
-
-  # Addons enabled/disabled via flags
+  # Addons enabled/disabled via flags (only AWS native addons)
   addons = {
     coredns            = true
     kube_proxy         = true
     vpc_cni            = true
     pod_identity_agent = true
-    alb_controller     = true
-    karpenter          = var.enable_karpenter
+    ebs_csi            = true
     metrics_server     = true
   }
 
-  # IAM role ARNs passed from IAM modules
-  # Terraform resolves the dependency graph automatically:
-  # 1. EKS cluster creates first → exports OIDC
-  # 2. iam_irsa uses OIDC → creates IRSA roles
-  # 3. EKS addons (internal resources) wait for the ARN values
-  iam_role_arns = {
-    alb_controller       = module.iam_irsa.roles["alb_controller"].arn
-    karpenter_controller = var.enable_karpenter ? module.iam_irsa.roles["karpenter_controller"].arn : null
-  }
-
-  alb_controller_config = {
-    chart_version       = "1.7.1"
-    default_target_type = "ip" # IP mode for production with large subnets
-  }
-
-  karpenter_config = {
-    chart_version = "1.0.1"
-  }
+  ebs_csi_role_arn = module.iam_irsa.roles["ebs_csi"].arn
 
   tags = local.tags
 
@@ -175,6 +154,19 @@ module "iam_irsa" {
   environment  = var.environment
 
   roles = merge(
+    # EBS CSI Driver IRSA role (always created - essential for persistent storage)
+    {
+      ebs_csi = {
+        description = "EBS CSI Driver IRSA Role"
+        trust_policy = templatefile("${path.module}/policies/trust/irsa.json.tpl", {
+          oidc_provider_arn = module.eks.oidc_provider_arn
+          oidc_provider_url = replace(module.eks.oidc_provider_url, "https://", "")
+          namespace         = "kube-system"
+          service_account   = "ebs-csi-controller-sa"
+        })
+        policy_json = file("${path.module}/policies/ebs-csi.json")
+      }
+    },
     # ALB Controller IRSA role (always created)
     {
       alb_controller = {
@@ -200,7 +192,33 @@ module "iam_irsa" {
         })
         policy_json = file("${path.module}/policies/karpenter-controller.json")
       }
-    } : {}
+    } : {},
+    # KEDA IRSA role (always enabled for prod)
+    {
+      keda = {
+        description = "KEDA Operator IRSA Role"
+        trust_policy = templatefile("${path.module}/policies/trust/irsa.json.tpl", {
+          oidc_provider_arn = module.eks.oidc_provider_arn
+          oidc_provider_url = replace(module.eks.oidc_provider_url, "https://", "")
+          namespace         = "keda"
+          service_account   = "keda-operator"
+        })
+        policy_json = file("${path.module}/policies/keda.json")
+      }
+    },
+    # External Secrets IRSA role (always enabled for prod)
+    {
+      external_secrets = {
+        description = "External Secrets Operator IRSA Role"
+        trust_policy = templatefile("${path.module}/policies/trust/irsa.json.tpl", {
+          oidc_provider_arn = module.eks.oidc_provider_arn
+          oidc_provider_url = replace(module.eks.oidc_provider_url, "https://", "")
+          namespace         = "external-secrets"
+          service_account   = "external-secrets"
+        })
+        policy_json = file("${path.module}/policies/external-secrets.json")
+      }
+    }
   )
 
   tags = local.tags
@@ -209,7 +227,68 @@ module "iam_irsa" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. UPDATE SECURITY GROUP RULES (after EKS is created)
+# 6. HELM ADDONS (ALB Controller, Karpenter, KEDA, External Secrets)
+# ─────────────────────────────────────────────────────────────────────────────
+# These are deployed AFTER iam_irsa to avoid circular dependencies.
+
+module "alb_controller" {
+  source = "../../modules/compute/eks/addons/alb-controller"
+
+  cluster_name        = local.cluster_name
+  cluster_endpoint    = module.eks.cluster_endpoint
+  vpc_id              = module.vpc.vpc_id
+  region              = data.aws_region.current.name
+  iam_role_arn        = module.iam_irsa.roles["alb_controller"].arn
+  chart_version       = "1.7.1"
+  default_target_type = "ip" # IP mode for production with large subnets
+
+  depends_on = [module.eks, module.iam_irsa]
+}
+
+module "karpenter" {
+  count  = var.enable_karpenter ? 1 : 0
+  source = "../../modules/compute/eks/addons/karpenter"
+
+  cluster_name                  = local.cluster_name
+  cluster_endpoint              = module.eks.cluster_endpoint
+  cluster_certificate_authority = module.eks.cluster_certificate_authority_data
+  controller_iam_role_arn       = module.iam_irsa.roles["karpenter_controller"].arn
+  node_iam_role_name            = split("/", module.iam_base.roles["karpenter_node"].arn)[1]
+  chart_version                 = "1.0.1"
+
+  tags = local.tags
+
+  depends_on = [module.eks, module.iam_irsa]
+}
+
+module "keda" {
+  source = "../../modules/compute/eks/addons/keda"
+
+  cluster_name      = local.cluster_name
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  iam_role_arn      = module.iam_irsa.roles["keda"].arn
+  chart_version     = "2.13.0"
+
+  tags = local.tags
+
+  depends_on = [module.eks, module.iam_irsa]
+}
+
+module "external_secrets" {
+  source = "../../modules/compute/eks/addons/external-secrets"
+
+  cluster_name      = local.cluster_name
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  iam_role_arn      = module.iam_irsa.roles["external_secrets"].arn
+  chart_version     = "0.9.11"
+
+  tags = local.tags
+
+  depends_on = [module.eks, module.iam_irsa]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. UPDATE SECURITY GROUP RULES (after EKS is created)
 # ─────────────────────────────────────────────────────────────────────────────
 # Now that EKS exists, we can add the ALB to EKS node security group rules.
 
@@ -226,7 +305,7 @@ resource "aws_security_group_rule" "alb_to_eks_nodes" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7. BASTION (needs IAM + SG + VPC)
+# 8. BASTION (needs IAM + SG + VPC)
 # ─────────────────────────────────────────────────────────────────────────────
 
 module "bastion" {
@@ -244,7 +323,7 @@ module "bastion" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 8. ELASTICACHE (optional, needs VPC + SG)
+# 9. ELASTICACHE (optional, needs VPC + SG)
 # ─────────────────────────────────────────────────────────────────────────────
 
 module "elasticache" {

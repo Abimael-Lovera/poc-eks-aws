@@ -54,6 +54,18 @@ variable "enable_karpenter" {
   default     = false
 }
 
+variable "enable_keda" {
+  description = "Enable KEDA for event-driven autoscaling"
+  type        = bool
+  default     = false
+}
+
+variable "enable_external_secrets" {
+  description = "Enable External Secrets Operator"
+  type        = bool
+  default     = false
+}
+
 # Bastion Configuration
 variable "enable_bastion" {
   description = "Enable bastion host"

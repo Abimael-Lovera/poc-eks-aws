@@ -67,6 +67,11 @@ module "eks" {
     eks-pod-identity-agent = var.addons.pod_identity_agent ? {
       most_recent = true
     } : null
+
+    aws-ebs-csi-driver = var.addons.ebs_csi ? {
+      most_recent              = true
+      service_account_role_arn = var.ebs_csi_role_arn
+    } : null
   }
 
   # Access entries for cluster admin
