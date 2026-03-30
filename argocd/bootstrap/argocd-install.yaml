@@ -1,0 +1,144 @@
+# ArgoCD Installation - Bootstrap
+# Apply with: kubectl apply -k argocd/bootstrap/
+# This uses the official ArgoCD Helm chart with production settings
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    app.kubernetes.io/managed-by: argocd
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-cd
+    targetRevision: 7.7.5
+    helm:
+      valuesObject:
+        # High Availability Configuration
+        controller:
+          replicas: 2
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+        
+        server:
+          replicas: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          
+          # Enable insecure mode (TLS termination at ALB)
+          extraArgs:
+            - --insecure
+          
+          service:
+            type: ClusterIP
+          
+          # Ingress configuration for ALB
+          ingress:
+            enabled: true
+            ingressClassName: alb
+            annotations:
+              alb.ingress.kubernetes.io/scheme: internet-facing
+              alb.ingress.kubernetes.io/target-type: ip
+              alb.ingress.kubernetes.io/healthcheck-path: /healthz
+              alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+              alb.ingress.kubernetes.io/ssl-redirect: "443"
+            hosts:
+              - argocd.example.com  # Replace with your domain
+        
+        repoServer:
+          replicas: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+        
+        applicationSet:
+          replicas: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+        
+        redis:
+          enabled: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+        
+        # Notifications for Slack/Teams (optional)
+        notifications:
+          enabled: true
+        
+        # Config
+        configs:
+          params:
+            # Enable status badge
+            server.enable.gzip: true
+            server.insecure: true
+          
+          cm:
+            # URL for ArgoCD
+            url: https://argocd.example.com  # Replace with your domain
+            
+            # Enable Helm with Kustomize
+            kustomize.buildOptions: --enable-helm
+            
+            # Resource tracking method
+            application.resourceTrackingMethod: annotation
+          
+          rbac:
+            policy.default: role:readonly
+            policy.csv: |
+              p, role:admin, applications, *, */*, allow
+              p, role:admin, clusters, *, *, allow
+              p, role:admin, repositories, *, *, allow
+              p, role:admin, projects, *, *, allow
+              g, admin, role:admin
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+        factor: 2

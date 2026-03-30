@@ -1,0 +1,103 @@
+# Kong Helm base values - Shared configuration across all environments
+# Environment-specific overrides in dev.yaml, staging.yaml, prod.yaml
+
+image:
+  repository: kong
+  tag: "3.6"
+
+ingressController:
+  enabled: true
+  installCRDs: true
+  ingressClass: kong
+  watchNamespaces: []
+  
+  # Admin API settings
+  adminApi:
+    tls:
+      enabled: false
+
+# Proxy configuration
+proxy:
+  enabled: true
+  type: LoadBalancer
+  
+  http:
+    enabled: true
+    containerPort: 8000
+    servicePort: 80
+  
+  tls:
+    enabled: true
+    containerPort: 8443
+    servicePort: 443
+
+# Admin API
+admin:
+  enabled: true
+  type: ClusterIP
+  http:
+    enabled: true
+    containerPort: 8001
+    servicePort: 8001
+
+# Status endpoint for health checks
+status:
+  enabled: true
+  http:
+    enabled: true
+    containerPort: 8100
+
+# Environment variables
+env:
+  database: "off"
+  plugins: bundled
+  
+  # Logging
+  proxy_access_log: /dev/stdout
+  admin_access_log: /dev/stdout
+  proxy_error_log: /dev/stderr
+  admin_error_log: /dev/stderr
+  
+  # Performance
+  nginx_worker_processes: auto
+  upstream_keepalive_pool_size: 100
+  upstream_keepalive_max_requests: 10000
+  upstream_keepalive_idle_timeout: "60"
+
+# Pod settings
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8100"
+  prometheus.io/path: "/metrics"
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Liveness and readiness probes
+livenessProbe:
+  httpGet:
+    path: /status
+    port: status
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /status/ready
+    port: status
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Disable enterprise features
+enterprise:
+  enabled: false
+
+# Disable PostgreSQL (DB-less mode)
+postgresql:
+  enabled: false

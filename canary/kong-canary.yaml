@@ -1,0 +1,130 @@
+# Kong Gateway Canary Configuration for Flagger
+# Progressive traffic shifting with automated rollback
+
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: kong-gateway
+  namespace: kong-prod
+spec:
+  # Target deployment to manage
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: kong-kong
+
+  # Traffic routing provider
+  provider: kong
+
+  # Ingress reference for traffic management
+  ingressRef:
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    name: kong-kong-proxy
+
+  # Autoscaler reference (optional - if using HPA)
+  autoscalerRef:
+    apiVersion: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    name: kong-kong
+
+  # Progressive traffic shift configuration
+  progressDeadlineSeconds: 600  # 10 minutes max for promotion
+
+  # Service configuration
+  service:
+    port: 80
+    targetPort: 8000
+    portDiscovery: true
+
+  # Canary analysis configuration
+  analysis:
+    # How often to run analysis
+    interval: 1m
+
+    # Number of failed checks before rollback
+    threshold: 5
+
+    # Max percentage of traffic to canary
+    maxWeight: 50
+
+    # Traffic increment per step
+    stepWeight: 10
+
+    # Metrics to analyze
+    metrics:
+      # Request success rate (must be > 99%)
+      - name: request-success-rate
+        thresholdRange:
+          min: 99
+        interval: 1m
+
+      # Request duration p99 (must be < 500ms)
+      - name: request-duration
+        thresholdRange:
+          max: 500
+        interval: 1m
+
+    # Webhooks for notifications
+    webhooks:
+      # Pre-rollout webhook (optional - for manual approval)
+      - name: "gate-approval"
+        type: confirm-rollout
+        url: http://flagger-loadtester.flagger-system/gate/approve
+
+      # Post-analysis notification
+      - name: "notify-slack"
+        type: post-analysis
+        url: http://slack-notifier.flagger-system/
+        timeout: 5s
+        metadata:
+          channel: "#deployments"
+          message: "Canary analysis completed for kong-gateway"
+
+      # Rollback notification
+      - name: "notify-rollback"
+        type: rollback
+        url: http://slack-notifier.flagger-system/
+        timeout: 5s
+        metadata:
+          channel: "#deployments"
+          message: "Kong canary rolled back!"
+
+---
+# MetricTemplate for custom Kong metrics
+apiVersion: flagger.app/v1beta1
+kind: MetricTemplate
+metadata:
+  name: kong-request-success-rate
+  namespace: kong-prod
+spec:
+  provider:
+    type: prometheus
+    address: http://prometheus-server.monitoring:80
+  query: |
+    sum(rate(kong_http_requests_total{
+      service="{{ target }}",
+      code!~"5.."
+    }[{{ interval }}])) 
+    / 
+    sum(rate(kong_http_requests_total{
+      service="{{ target }}"
+    }[{{ interval }}])) * 100
+
+---
+# MetricTemplate for Kong latency
+apiVersion: flagger.app/v1beta1
+kind: MetricTemplate
+metadata:
+  name: kong-request-duration
+  namespace: kong-prod
+spec:
+  provider:
+    type: prometheus
+    address: http://prometheus-server.monitoring:80
+  query: |
+    histogram_quantile(0.99,
+      sum(rate(kong_request_latency_ms_bucket{
+        service="{{ target }}"
+      }[{{ interval }}])) by (le)
+    )

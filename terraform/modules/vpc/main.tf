@@ -21,11 +21,30 @@ data "aws_availability_zones" "available" {
 locals {
   azs = slice(data.aws_availability_zones.available.names, 0, var.az_count)
 
-  # Calculate subnet CIDRs
-  # Public subnets: first half of AZs
-  # Private subnets: second half of AZs
-  public_subnets  = [for i, az in local.azs : cidrsubnet(var.vpc_cidr, 8, i)]
-  private_subnets = [for i, az in local.azs : cidrsubnet(var.vpc_cidr, 8, i + var.az_count)]
+  # Calculate subnet CIDRs based on mode
+  # IP Mode (production): Private subnets need /23 (512 IPs) for pod networking
+  # Instance Mode (dev): /24 (256 IPs) is sufficient
+  #
+  # VPC: 10.0.0.0/16 (65,536 IPs)
+  # IP Mode Layout:
+  #   Public:  10.0.1.0/24, 10.0.2.0/24, 10.0.3.0/24   (256 IPs each)
+  #   Private: 10.0.10.0/23, 10.0.12.0/23, 10.0.14.0/23 (512 IPs each)
+  # Instance Mode Layout:
+  #   Public:  10.0.1.0/24, 10.0.2.0/24, 10.0.3.0/24   (256 IPs each)
+  #   Private: 10.0.10.0/24, 10.0.11.0/24, 10.0.12.0/24 (256 IPs each)
+
+  # Public subnets: /24 (small, just for NAT/ALB)
+  public_subnets = [for i, az in local.azs : cidrsubnet(var.vpc_cidr, 8, i + 1)]
+
+  # Private subnets: /23 for IP mode, /24 for instance mode
+  private_subnet_newbits = var.use_large_private_subnets ? 7 : 8
+  private_subnets = var.use_large_private_subnets ? [
+    # IP Mode: /23 subnets starting at 10.0.10.0
+    for i, az in local.azs : cidrsubnet(var.vpc_cidr, 7, i + 5)
+    ] : [
+    # Instance Mode: /24 subnets
+    for i, az in local.azs : cidrsubnet(var.vpc_cidr, 8, i + 10)
+  ]
 }
 
 module "vpc" {

@@ -1,4 +1,5 @@
-.PHONY: help local-up local-down aws-init aws-plan aws-apply aws-destroy kong-deploy kong-test clean
+.PHONY: help local-up local-down aws-init aws-plan aws-apply aws-destroy kong-deploy kong-test clean \
+       prod-init prod-plan prod-apply prod-destroy
 
 # Colors
 BLUE := \033[0;34m
@@ -13,6 +14,7 @@ AWS_REGION ?= us-east-1
 ENVIRONMENT ?= dev
 CLUSTER_NAME ?= poc-eks-$(ENVIRONMENT)
 TF_DIR := terraform/environments/$(ENVIRONMENT)
+TF_PROD_DIR := terraform/environments/prod
 STATE_DIR := terraform/state
 
 # Default target
@@ -32,6 +34,12 @@ help:
 	@echo "  make aws-plan      Plan AWS infrastructure changes"
 	@echo "  make aws-apply     Apply AWS infrastructure"
 	@echo "  make aws-destroy   Destroy AWS infrastructure"
+	@echo ""
+	@echo "$(GREEN)Production Environment:$(NC)"
+	@echo "  make prod-init     Initialize Terraform for prod"
+	@echo "  make prod-plan     Plan prod infrastructure changes"
+	@echo "  make prod-apply    Apply prod infrastructure"
+	@echo "  make prod-destroy  Destroy prod infrastructure"
 	@echo ""
 	@echo "$(GREEN)Deployment:$(NC)"
 	@echo "  make kong-deploy   Deploy Kong to cluster"
@@ -91,6 +99,34 @@ aws-destroy:
 	@echo "$(YELLOW)WARNING: This will destroy all AWS resources!$(NC)"
 	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
 	@cd $(TF_DIR) && \
+		AWS_PROFILE=$(AWS_PROFILE) terraform destroy
+
+# ═══════════════════════════════════════════════════════════════
+# Production Environment
+# ═══════════════════════════════════════════════════════════════
+
+prod-init:
+	@echo "$(GREEN)▶ Initializing Terraform for prod...$(NC)"
+	@cd $(TF_PROD_DIR) && \
+		AWS_PROFILE=$(AWS_PROFILE) terraform init
+
+prod-plan:
+	@echo "$(BLUE)▶ Planning prod infrastructure...$(NC)"
+	@cd $(TF_PROD_DIR) && \
+		AWS_PROFILE=$(AWS_PROFILE) terraform init && \
+		AWS_PROFILE=$(AWS_PROFILE) terraform plan
+
+prod-apply:
+	@echo "$(GREEN)▶ Applying prod infrastructure...$(NC)"
+	@cd $(TF_PROD_DIR) && \
+		AWS_PROFILE=$(AWS_PROFILE) terraform init && \
+		AWS_PROFILE=$(AWS_PROFILE) terraform apply
+
+prod-destroy:
+	@echo "$(RED)▶ Destroying prod infrastructure...$(NC)"
+	@echo "$(YELLOW)WARNING: This will destroy all PRODUCTION resources!$(NC)"
+	@read -p "Are you sure you want to destroy PRODUCTION? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
+	@cd $(TF_PROD_DIR) && \
 		AWS_PROFILE=$(AWS_PROFILE) terraform destroy
 
 # ═══════════════════════════════════════════════════════════════

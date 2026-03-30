@@ -25,6 +25,23 @@ variable "chart_version" {
   default     = "1.7.1"
 }
 
+variable "default_target_type" {
+  description = "Default target type for load balancers: 'ip' for IP mode (prod) or 'instance' for instance mode (dev)"
+  type        = string
+  default     = "instance"
+
+  validation {
+    condition     = contains(["ip", "instance"], var.default_target_type)
+    error_message = "default_target_type must be either 'ip' or 'instance'"
+  }
+}
+
+variable "enable_pod_readiness_gate" {
+  description = "Enable pod readiness gate injection for IP mode"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)

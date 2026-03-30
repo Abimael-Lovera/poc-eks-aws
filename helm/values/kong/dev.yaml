@@ -1,0 +1,69 @@
+# Kong Helm values for Development - Instance Mode
+# Minimal resources, auto-sync, single NAT gateway
+
+replicaCount: 2
+
+# Proxy configuration for Instance Mode (NodePort)
+proxy:
+  enabled: true
+  type: NodePort
+  
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "instance"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+  
+  http:
+    enabled: true
+    containerPort: 8000
+    servicePort: 80
+    nodePort: 30080
+  
+  tls:
+    enabled: true
+    containerPort: 8443
+    servicePort: 443
+    nodePort: 30443
+
+# Minimal resources for dev
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# No autoscaling in dev
+autoscaling:
+  enabled: false
+
+# Basic PDB
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Spread across AZs but allow scheduling anywhere
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: kong
+
+# Environment variables for dev
+env:
+  database: "off"
+  plugins: bundled
+  
+  # Verbose logging for debugging
+  proxy_access_log: /dev/stdout
+  admin_access_log: /dev/stdout
+  proxy_error_log: /dev/stderr
+  admin_error_log: /dev/stderr
+  log_level: debug
+  
+  # Performance (lower for dev)
+  nginx_worker_processes: "2"
+  upstream_keepalive_pool_size: 50

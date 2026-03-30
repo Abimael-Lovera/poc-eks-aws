@@ -1,0 +1,92 @@
+# Kong Gateway ApplicationSet - Multi-environment deployment
+# Deploys Kong to dev, staging, and prod with environment-specific values
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: kong-gateway
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          # Development - Auto-sync enabled
+          - env: dev
+            namespace: kong-dev
+            valueFile: dev.yaml
+            autoSync: "true"
+            targetType: instance
+            replicas: "2"
+
+          # Staging - Manual sync
+          - env: staging
+            namespace: kong-staging
+            valueFile: staging.yaml
+            autoSync: "false"
+            targetType: instance
+            replicas: "2"
+
+          # Production - Manual sync with IP mode
+          - env: prod
+            namespace: kong-prod
+            valueFile: prod.yaml
+            autoSync: "false"
+            targetType: ip
+            replicas: "3"
+
+  template:
+    metadata:
+      name: 'kong-{{env}}'
+      namespace: argocd
+      labels:
+        app: kong
+        env: '{{env}}'
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: kong-project
+
+      sources:
+        # Kong Helm chart
+        - repoURL: https://charts.konghq.com
+          chart: kong
+          targetRevision: 2.38.0
+          helm:
+            releaseName: kong
+            valueFiles:
+              - $values/helm/values/kong/base.yaml
+              - $values/helm/values/kong/{{valueFile}}
+            values: |
+              # Override replicas per environment
+              replicaCount: {{replicas}}
+
+        # Values from Git repository
+        - repoURL: https://github.com/your-org/poc-eks-aws  # Replace with your repo
+          targetRevision: main
+          ref: values
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{namespace}}'
+
+      syncPolicy:
+        automated:
+          prune: '{{autoSync}}'
+          selfHeal: '{{autoSync}}'
+        syncOptions:
+          - CreateNamespace=true
+          - PruneLast=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 5s
+            maxDuration: 3m
+            factor: 2
+
+      # Health checks
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas  # Ignore HPA-managed replicas

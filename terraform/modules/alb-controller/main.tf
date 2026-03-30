@@ -123,10 +123,19 @@ resource "helm_release" "alb_controller" {
     value = var.vpc_id
   }
 
-  # Default to instance mode
+  # Default target type: ip for production, instance for dev
   set {
     name  = "defaultTargetType"
-    value = "instance"
+    value = var.default_target_type
+  }
+
+  # Enable pod readiness gate for IP mode
+  dynamic "set" {
+    for_each = var.enable_pod_readiness_gate ? [1] : []
+    content {
+      name  = "enablePodReadinessGateInject"
+      value = "true"
+    }
   }
 
   depends_on = [

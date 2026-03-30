@@ -21,6 +21,12 @@ variable "single_nat_gateway" {
   default     = true
 }
 
+variable "use_large_private_subnets" {
+  description = "Use /23 subnets for private (required for IP mode). Set to false for /24 (instance mode)"
+  type        = bool
+  default     = false
+}
+
 variable "cluster_name" {
   description = "Name of the EKS cluster (for subnet tagging)"
   type        = string

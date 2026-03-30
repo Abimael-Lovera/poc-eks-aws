@@ -1,0 +1,134 @@
+# Kong Helm values for Production - Propuesta A (IP Mode)
+# ALB with IP target type, ElastiCache Redis, Multi-AZ, High Availability
+
+replicaCount: 3
+
+# Proxy configuration for IP Mode (ALB targets pod IPs directly)
+proxy:
+  enabled: true
+  type: LoadBalancer
+  
+  # Service annotations for ALB IP Mode
+  annotations:
+    # ALB Controller annotations
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    
+    # Health check configuration
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "HTTP"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "8100"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/status/ready"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-interval: "10"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-timeout: "5"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-healthy-threshold: "2"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-unhealthy-threshold: "2"
+  
+  http:
+    enabled: true
+    containerPort: 8000
+    servicePort: 80
+  
+  tls:
+    enabled: true
+    containerPort: 8443
+    servicePort: 443
+
+# Production resources
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Pod Disruption Budget for HA
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Topology spread for Multi-AZ
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: kong
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: kong
+
+# Anti-affinity for spreading across nodes
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - kong
+          topologyKey: topology.kubernetes.io/zone
+
+# Environment variables for production
+env:
+  database: "off"
+  plugins: bundled,rate-limiting
+  
+  # Logging
+  proxy_access_log: /dev/stdout
+  admin_access_log: /dev/stdout
+  proxy_error_log: /dev/stderr
+  admin_error_log: /dev/stderr
+  log_level: warn  # Less verbose in production
+  
+  # Performance tuning
+  nginx_worker_processes: auto
+  upstream_keepalive_pool_size: 256
+  upstream_keepalive_max_requests: 100000
+  upstream_keepalive_idle_timeout: "60"
+  
+  # Real IP from ALB
+  real_ip_header: "X-Forwarded-For"
+  trusted_ips: "0.0.0.0/0,::/0"
+
+# Production-specific annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8100"
+  prometheus.io/path: "/metrics"
+  # Datadog (optional)
+  # ad.datadoghq.com/kong.logs: '[{"source":"kong","service":"kong-gateway"}]'
+
+# Node selector (optional - run on specific node group)
+# nodeSelector:
+#   node-type: system
+
+# Tolerations (if using taints)
+tolerations: []
+
+# Priority class for production workloads
+# priorityClassName: high-priority
+
+# Init containers (optional - for config validation)
+# initContainers: []
+
+# Extra volumes for custom plugins or certs
+# extraVolumes: []
+# extraVolumeMounts: []

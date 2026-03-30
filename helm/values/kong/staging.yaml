@@ -1,0 +1,123 @@
+# Kong Helm values for Staging - Instance Mode
+# Moderate resources, balanced between dev and prod
+# Instance mode for simpler debugging, but production-like configuration
+
+replicaCount: 2
+
+# Proxy configuration for Instance Mode (NodePort)
+# Simpler than IP mode, easier to debug, uses NodePort routing
+proxy:
+  enabled: true
+  type: NodePort
+  
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "instance"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    
+    # Health check configuration (same as prod for consistency)
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: "HTTP"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "8100"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/status/ready"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-interval: "15"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-timeout: "5"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-healthy-threshold: "2"
+    service.beta.kubernetes.io/aws-load-balancer-healthcheck-unhealthy-threshold: "3"
+  
+  http:
+    enabled: true
+    containerPort: 8000
+    servicePort: 80
+    nodePort: 30080
+  
+  tls:
+    enabled: true
+    containerPort: 8443
+    servicePort: 443
+    nodePort: 30443
+
+# Moderate resources - between dev and prod
+resources:
+  requests:
+    cpu: 250m
+    memory: 384Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# No autoscaling in staging (manual control for testing)
+# Enable if needed for load testing
+autoscaling:
+  enabled: false
+  # Uncomment to enable HPA for load testing:
+  # minReplicas: 2
+  # maxReplicas: 5
+  # targetCPUUtilizationPercentage: 75
+
+# Pod Disruption Budget - ensure at least 1 pod available during updates
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Topology spread - prefer spreading but allow scheduling anywhere
+# Less strict than prod (ScheduleAnyway vs DoNotSchedule)
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: kong
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: kong
+
+# Soft anti-affinity for spreading across nodes (same as prod but lower weight)
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 50
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - kong
+          topologyKey: topology.kubernetes.io/zone
+
+# Environment variables for staging
+env:
+  database: "off"
+  plugins: bundled,rate-limiting
+  
+  # Logging - info level for staging (between debug and warn)
+  proxy_access_log: /dev/stdout
+  admin_access_log: /dev/stdout
+  proxy_error_log: /dev/stderr
+  admin_error_log: /dev/stderr
+  log_level: info
+  
+  # Performance tuning (moderate)
+  nginx_worker_processes: auto
+  upstream_keepalive_pool_size: 128
+  upstream_keepalive_max_requests: 50000
+  upstream_keepalive_idle_timeout: "60"
+  
+  # Real IP from NLB
+  real_ip_header: "X-Forwarded-For"
+  trusted_ips: "0.0.0.0/0,::/0"
+
+# Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8100"
+  prometheus.io/path: "/metrics"
+  environment: "staging"
+
+# Tolerations (none by default, add if using taints)
+tolerations: []
