@@ -91,7 +91,7 @@ make aws-init
 This creates:
 - **S3 Bucket**: `poc-eks-aws-tfstate-<account-id>` (versioned, encrypted)
 - **DynamoDB Table**: `poc-eks-aws-tflock` (for state locking)
-- **Config File**: `terraform/state/backend.conf`
+- **Config File**: `infra/state/backend.conf`
 
 ---
 
@@ -109,10 +109,10 @@ The dev environment uses:
 
 ```bash
 # Check default variables
-cat terraform/environments/dev/variables.tf
+cat infra/environments/dev/variables.tf
 
 # Optionally create tfvars override
-cp terraform/environments/dev/terraform.tfvars.example terraform/environments/dev/terraform.tfvars
+cp infra/environments/dev/terraform.tfvars.example infra/environments/dev/terraform.tfvars
 ```
 
 #### Step 2: Plan Infrastructure
@@ -149,7 +149,7 @@ Provisioning takes ~15-20 minutes. Expected resources:
 
 ```bash
 # Get the command from Terraform output
-terraform -chdir=terraform/environments/dev output configure_kubectl
+terraform -chdir=infra/environments/dev output configure_kubectl
 
 # Run it
 aws eks update-kubeconfig --region us-east-1 --name poc-eks-dev
@@ -193,7 +193,7 @@ Provisioning takes ~25-30 minutes.
 #### Step 3: Configure kubectl for Prod
 
 ```bash
-terraform -chdir=terraform/environments/prod output configure_kubectl
+terraform -chdir=infra/environments/prod output configure_kubectl
 aws eks update-kubeconfig --region us-east-1 --name poc-eks-prod
 ```
 
@@ -201,8 +201,8 @@ aws eks update-kubeconfig --region us-east-1 --name poc-eks-prod
 
 ```bash
 # For Kong rate limiting configuration
-terraform -chdir=terraform/environments/prod output redis_primary_endpoint
-terraform -chdir=terraform/environments/prod output redis_connection_url
+terraform -chdir=infra/environments/prod output redis_primary_endpoint
+terraform -chdir=infra/environments/prod output redis_connection_url
 ```
 
 ### What Gets Created

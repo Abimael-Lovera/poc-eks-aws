@@ -1,0 +1,27 @@
+# Dev Environment - Terraform Variables
+# Copy this to terraform.tfvars and customize
+
+project_name = "poc-eks"
+aws_region   = "us-east-1"
+environment  = "dev"
+
+# VPC Configuration
+vpc_cidr                  = "10.0.0.0/16"
+az_count                  = 2
+single_nat_gateway        = true  # Set to false for HA in production
+use_large_private_subnets = false # Set to true if using ALB with target_type=ip
+
+# EKS Cluster
+cluster_version = "1.31"
+
+# Karpenter (optional autoscaler)
+enable_karpenter = false # Set to true to enable Karpenter
+
+# Bastion Host (optional)
+enable_bastion    = false # Set to true to enable bastion host
+bastion_ssh_cidrs = []    # Add your IP for SSH access, or leave empty for SSM-only
+
+# ElastiCache Redis (optional)
+enable_elasticache     = false        # Set to true to enable Redis
+elasticache_node_type  = "cache.t3.micro"
+elasticache_num_nodes  = 1

@@ -13,9 +13,9 @@ AWS_PROFILE ?= default
 AWS_REGION ?= us-east-1
 ENVIRONMENT ?= dev
 CLUSTER_NAME ?= poc-eks-$(ENVIRONMENT)
-TF_DIR := terraform/environments/$(ENVIRONMENT)
-TF_PROD_DIR := terraform/environments/prod
-STATE_DIR := terraform/state
+TF_DIR := infra/environments/$(ENVIRONMENT)
+TF_PROD_DIR := infra/environments/prod
+STATE_DIR := infra/state
 
 # Default target
 help:

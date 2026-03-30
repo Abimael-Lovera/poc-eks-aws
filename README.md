@@ -49,7 +49,7 @@ This POC implements **Propuesta A (IP Mode)** from the [Kong HA Architecture Pro
 
 ```
 poc-eks-aws/
-├── terraform/                 # Infrastructure as Code
+├── infra/                     # Infrastructure as Code
 │   ├── modules/               # Reusable Terraform modules
 │   │   ├── vpc/               # VPC, subnets, NAT gateway
 │   │   ├── eks/               # EKS cluster configuration
@@ -209,7 +209,7 @@ export ENVIRONMENT=dev             # Environment (dev/staging/prod)
 
 ### Terraform Variables
 
-Edit `terraform/environments/<env>/terraform.tfvars`:
+Edit `infra/environments/<env>/terraform.tfvars`:
 
 ```hcl
 aws_region  = "us-east-1"
