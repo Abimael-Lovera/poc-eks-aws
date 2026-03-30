@@ -305,8 +305,7 @@ module "external_secrets" {
 # Now that EKS exists, we can add the ALB to EKS node security group rules.
 
 resource "aws_security_group_rule" "alb_to_eks_nodes" {
-  count = module.security_groups.alb_security_group_id != null ? 1 : 0
-
+  # Always create - ALB SG is always created via security_groups module
   type                     = "ingress"
   from_port                = 30000
   to_port                  = 32767
@@ -314,6 +313,8 @@ resource "aws_security_group_rule" "alb_to_eks_nodes" {
   security_group_id        = module.eks.node_security_group_id
   source_security_group_id = module.security_groups.alb_security_group_id
   description              = "Allow ALB to reach EKS NodePort services"
+
+  depends_on = [module.eks, module.security_groups]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

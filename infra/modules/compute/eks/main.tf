@@ -41,7 +41,7 @@ module "eks" {
   cluster_additional_security_group_ids = var.security_group_ids
 
   # Use the role ARN passed from IAM module
-  create_iam_role = var.cluster_role_arn == null
+  create_iam_role = var.create_cluster_iam_role
   iam_role_arn    = var.cluster_role_arn
 
   # EKS Managed Node Groups

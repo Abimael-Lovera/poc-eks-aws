@@ -22,7 +22,12 @@ variable "subnet_ids" {
 variable "cluster_role_arn" {
   description = "ARN of the IAM role for the EKS cluster (from IAM module)"
   type        = string
-  default     = null
+}
+
+variable "create_cluster_iam_role" {
+  description = "Whether to create IAM role for EKS cluster. Set to false when providing cluster_role_arn"
+  type        = bool
+  default     = false
 }
 
 variable "cluster_endpoint_public_access" {
