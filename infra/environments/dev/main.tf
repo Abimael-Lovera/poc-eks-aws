@@ -126,13 +126,11 @@ module "eks" {
     kube_proxy         = true
     vpc_cni            = true
     pod_identity_agent = true
-    ebs_csi            = true
+    ebs_csi            = false # Deployed as separate Helm module below
     alb_controller     = false # Deployed as separate module below
     karpenter          = false # Deployed as separate module below
     metrics_server     = true
   }
-
-  ebs_csi_role_arn = module.iam_irsa.roles["ebs_csi"].arn
 
   tags = local.tags
 
@@ -224,9 +222,21 @@ module "iam_irsa" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. HELM ADDONS (ALB Controller, Karpenter, KEDA, External Secrets)
+# 6. HELM ADDONS (EBS CSI, ALB Controller, Karpenter, KEDA, External Secrets)
 # ─────────────────────────────────────────────────────────────────────────────
 # These are deployed AFTER iam_irsa to avoid circular dependencies.
+
+# EBS CSI Driver - Persistent storage
+module "ebs_csi" {
+  source = "../../modules/compute/eks/addons/ebs-csi"
+
+  cluster_name      = local.cluster_name
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  iam_role_arn      = module.iam_irsa.roles["ebs_csi"].arn
+  tags              = local.tags
+
+  depends_on = [module.eks, module.iam_irsa]
+}
 
 module "alb_controller" {
   source = "../../modules/compute/eks/addons/alb-controller"

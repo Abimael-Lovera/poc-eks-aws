@@ -47,7 +47,7 @@ module "eks" {
   # EKS Managed Node Groups
   eks_managed_node_groups = var.node_groups
 
-  # Cluster addons (AWS native)
+  # Cluster addons (AWS native only - Helm addons deployed separately)
   cluster_addons = {
     coredns = var.addons.coredns ? {
       most_recent = true
@@ -66,11 +66,6 @@ module "eks" {
 
     eks-pod-identity-agent = var.addons.pod_identity_agent ? {
       most_recent = true
-    } : null
-
-    aws-ebs-csi-driver = var.addons.ebs_csi ? {
-      most_recent              = true
-      service_account_role_arn = var.ebs_csi_role_arn
     } : null
   }
 

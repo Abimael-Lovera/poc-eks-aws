@@ -63,12 +63,6 @@ variable "addons" {
   default = {}
 }
 
-variable "ebs_csi_role_arn" {
-  description = "IAM role ARN for EBS CSI driver (required if ebs_csi addon is enabled)"
-  type        = string
-  default     = null
-}
-
 variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)
