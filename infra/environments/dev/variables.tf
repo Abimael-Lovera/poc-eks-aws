@@ -97,3 +97,19 @@ variable "elasticache_num_nodes" {
   type        = number
   default     = 1
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Two-Phase Deployment (for private clusters)
+# ─────────────────────────────────────────────────────────────────────────────
+
+variable "deploy_helm_addons" {
+  description = "Deploy Helm addons (set to false for phase 1 when deploying to private cluster from local machine)"
+  type        = bool
+  default     = true
+}
+
+variable "kubernetes_host_override" {
+  description = "Override Kubernetes API host (for SSM tunnel, use https://localhost:6443)"
+  type        = string
+  default     = ""
+}

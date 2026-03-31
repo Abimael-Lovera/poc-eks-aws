@@ -31,8 +31,9 @@ provider "aws" {
 
 # Helm and Kubernetes providers with exec-based authentication
 # Uses AWS CLI to get EKS token dynamically during apply
+# Supports override for SSM tunnel (localhost:6443)
 provider "kubernetes" {
-  host                   = module.eks.cluster_endpoint
+  host                   = var.kubernetes_host_override != "" ? var.kubernetes_host_override : module.eks.cluster_endpoint
   cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
 
   exec {
@@ -51,7 +52,7 @@ provider "kubernetes" {
 
 provider "helm" {
   kubernetes = {
-    host                   = module.eks.cluster_endpoint
+    host                   = var.kubernetes_host_override != "" ? var.kubernetes_host_override : module.eks.cluster_endpoint
     cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
 
     exec = {

@@ -113,14 +113,15 @@ module "eks" {
   cluster_endpoint_public_access  = false
   cluster_endpoint_private_access = true
 
-  # Managed node groups
+  # Managed node groups - SPOT instances for FinOps optimization
+  # Multiple instance types for better SPOT availability
   node_groups = {
     general = {
       min_size       = 1
-      max_size       = 2
+      max_size       = 3
       desired_size   = 1
-      instance_types = ["t3.medium"]
-      capacity_type  = "ON_DEMAND"
+      instance_types = ["t3.medium", "t3a.medium", "t2.medium"]
+      capacity_type  = "SPOT"
       ami_type       = "BOTTLEROCKET_x86_64"
     }
   }
@@ -230,9 +231,12 @@ module "iam_irsa" {
 # 6. HELM ADDONS (EBS CSI, ALB Controller, Karpenter, KEDA, External Secrets)
 # ─────────────────────────────────────────────────────────────────────────────
 # These are deployed AFTER iam_irsa to avoid circular dependencies.
+# For private clusters, set deploy_helm_addons=false in phase 1, then
+# deploy via SSM tunnel in phase 2 with deploy_helm_addons=true.
 
 # EBS CSI Driver - Persistent storage
 module "ebs_csi" {
+  count  = var.deploy_helm_addons ? 1 : 0
   source = "../../modules/compute/eks/addons/ebs-csi"
 
   cluster_name      = local.cluster_name
@@ -244,6 +248,7 @@ module "ebs_csi" {
 }
 
 module "alb_controller" {
+  count  = var.deploy_helm_addons ? 1 : 0
   source = "../../modules/compute/eks/addons/alb-controller"
 
   cluster_name        = local.cluster_name
@@ -258,7 +263,7 @@ module "alb_controller" {
 }
 
 module "karpenter" {
-  count  = var.enable_karpenter ? 1 : 0
+  count  = var.enable_karpenter && var.deploy_helm_addons ? 1 : 0
   source = "../../modules/compute/eks/addons/karpenter"
 
   cluster_name                  = local.cluster_name
@@ -274,7 +279,7 @@ module "karpenter" {
 }
 
 module "keda" {
-  count  = var.enable_keda ? 1 : 0
+  count  = var.enable_keda && var.deploy_helm_addons ? 1 : 0
   source = "../../modules/compute/eks/addons/keda"
 
   cluster_name      = local.cluster_name
@@ -288,7 +293,7 @@ module "keda" {
 }
 
 module "external_secrets" {
-  count  = var.enable_external_secrets ? 1 : 0
+  count  = var.enable_external_secrets && var.deploy_helm_addons ? 1 : 0
   source = "../../modules/compute/eks/addons/external-secrets"
 
   cluster_name      = local.cluster_name
