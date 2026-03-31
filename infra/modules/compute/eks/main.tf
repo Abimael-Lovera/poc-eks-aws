@@ -44,6 +44,27 @@ module "eks" {
   create_iam_role = var.create_cluster_iam_role
   iam_role_arn    = var.cluster_role_arn
 
+  # Node Security Group - allow all egress for ECR, SSM, EKS API access
+  node_security_group_additional_rules = {
+    ingress_self_all = {
+      description = "Node to node all ports/protocols"
+      protocol    = "-1"
+      from_port   = 0
+      to_port     = 0
+      type        = "ingress"
+      self        = true
+    }
+    egress_all = {
+      description      = "Node all egress"
+      protocol         = "-1"
+      from_port        = 0
+      to_port          = 0
+      type             = "egress"
+      cidr_blocks      = ["0.0.0.0/0"]
+      ipv6_cidr_blocks = ["::/0"]
+    }
+  }
+
   # EKS Managed Node Groups
   eks_managed_node_groups = var.node_groups
 
