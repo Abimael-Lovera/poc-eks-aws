@@ -117,6 +117,7 @@ module "eks" {
       desired_size   = 3
       instance_types = ["t3.large", "t3a.large"]
       capacity_type  = "ON_DEMAND"
+      ami_type       = "BOTTLEROCKET_x86_64"
     }
     spot = {
       min_size       = 0
@@ -124,6 +125,7 @@ module "eks" {
       desired_size   = 2
       instance_types = ["t3.large", "t3a.large"]
       capacity_type  = "SPOT"
+      ami_type       = "BOTTLEROCKET_x86_64"
     }
   }
 

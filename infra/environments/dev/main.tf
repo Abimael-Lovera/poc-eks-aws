@@ -117,6 +117,7 @@ module "eks" {
       desired_size   = 2
       instance_types = ["t3.medium"]
       capacity_type  = "ON_DEMAND"
+      ami_type       = "BOTTLEROCKET_x86_64"
     }
   }
 
