@@ -55,3 +55,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "key_name" {
+  description = "SSH key pair name for bastion access. If null, SSH is disabled (SSM only)"
+  type        = string
+  default     = null
+}

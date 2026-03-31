@@ -38,6 +38,7 @@ resource "aws_instance" "bastion" {
   vpc_security_group_ids      = var.security_group_ids
   iam_instance_profile        = var.iam_instance_profile_name
   associate_public_ip_address = var.associate_public_ip
+  key_name                    = var.key_name
 
   root_block_device {
     volume_type           = "gp3"
@@ -49,6 +50,10 @@ resource "aws_instance" "bastion" {
   user_data = base64encode(<<-EOF
     #!/bin/bash
     set -e
+    
+    # Enable and start SSM agent (ensure it's running for Session Manager)
+    systemctl enable amazon-ssm-agent
+    systemctl start amazon-ssm-agent
     
     # Update system
     dnf update -y
@@ -66,9 +71,11 @@ resource "aws_instance" "bastion" {
     
     # Install AWS CLI v2 (already installed on AL2023)
     
-    # Create kubectl config directory for ssm-user
+    # Create kubectl config directory for ssm-user and ec2-user
     mkdir -p /home/ssm-user/.kube
     chown -R ssm-user:ssm-user /home/ssm-user
+    mkdir -p /home/ec2-user/.kube
+    chown -R ec2-user:ec2-user /home/ec2-user
     
     echo "Bastion setup complete!"
   EOF

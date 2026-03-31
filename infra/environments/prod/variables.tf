@@ -45,7 +45,7 @@ variable "use_large_private_subnets" {
 variable "cluster_version" {
   description = "Kubernetes version for the EKS cluster"
   type        = string
-  default     = "1.31"
+  default     = "1.32"
 }
 
 variable "enable_karpenter" {
