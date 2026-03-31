@@ -109,12 +109,16 @@ module "eks" {
   subnet_ids         = module.vpc.private_subnets
   security_group_ids = []
 
+  # Cluster endpoint access - Private only (access via bastion/VPN)
+  cluster_endpoint_public_access  = false
+  cluster_endpoint_private_access = true
+
   # Managed node groups
   node_groups = {
     general = {
-      min_size       = 2
-      max_size       = 4
-      desired_size   = 2
+      min_size       = 1
+      max_size       = 2
+      desired_size   = 1
       instance_types = ["t3.medium"]
       capacity_type  = "ON_DEMAND"
       ami_type       = "BOTTLEROCKET_x86_64"
@@ -130,7 +134,7 @@ module "eks" {
     ebs_csi            = false # Deployed as separate Helm module below
     alb_controller     = false # Deployed as separate module below
     karpenter          = false # Deployed as separate module below
-    metrics_server     = true
+    metrics_server     = false
   }
 
   tags = local.tags

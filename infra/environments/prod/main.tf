@@ -109,20 +109,24 @@ module "eks" {
   subnet_ids         = module.vpc.private_subnets
   security_group_ids = []
 
+  # Cluster endpoint access - Private only (access via bastion/VPN)
+  cluster_endpoint_public_access  = false
+  cluster_endpoint_private_access = true
+
   # Production managed node groups with multiple instance types
   node_groups = {
     general = {
-      min_size       = 3
-      max_size       = 10
-      desired_size   = 3
+      min_size       = 1
+      max_size       = 3
+      desired_size   = 1
       instance_types = ["t3.large", "t3a.large"]
       capacity_type  = "ON_DEMAND"
       ami_type       = "BOTTLEROCKET_x86_64"
     }
     spot = {
       min_size       = 0
-      max_size       = 5
-      desired_size   = 2
+      max_size       = 2
+      desired_size   = 0
       instance_types = ["t3.large", "t3a.large"]
       capacity_type  = "SPOT"
       ami_type       = "BOTTLEROCKET_x86_64"
