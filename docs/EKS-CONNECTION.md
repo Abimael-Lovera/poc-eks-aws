@@ -2,70 +2,167 @@
 
 This guide explains how to connect to the EKS clusters deployed by this project.
 
+## Architecture
+
+The EKS clusters are configured with **private endpoint only** for security. This means:
+
+- ❌ No direct access from internet
+- ✅ Access only from within the VPC (bastion, VPN, or port forwarding)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                      YOUR MACHINE                             │
+│                                                               │
+│  Terminal 1:                    Terminal 2:                   │
+│  ┌─────────────────────┐       ┌─────────────────────┐       │
+│  │ eks-connect.sh      │       │ kubectl get nodes   │       │
+│  │ dev forward         │       │                     │       │
+│  │                     │       │ → localhost:6443    │       │
+│  │ (SSM Port Forward)  │◄──────┤                     │       │
+│  └─────────────────────┘       └─────────────────────┘       │
+│           │                                                   │
+└───────────┼───────────────────────────────────────────────────┘
+            │ SSM Tunnel (encrypted)
+            ▼
+┌──────────────────────────────────────────────────────────────┐
+│                         AWS VPC                               │
+│                                                               │
+│  ┌─────────────┐              ┌─────────────────────────┐    │
+│  │   BASTION   │─────────────►│   EKS API (Private)     │    │
+│  │   (SSM)     │   port 443   │   https://xxx.eks...    │    │
+│  └─────────────┘              └─────────────────────────┘    │
+│                                           │                   │
+│                               ┌───────────┴───────────┐      │
+│                               │   WORKER NODES        │      │
+│                               │   (Bottlerocket)      │      │
+│                               └───────────────────────┘      │
+└──────────────────────────────────────────────────────────────┘
+```
+
 ## Prerequisites
 
 1. **AWS CLI v2** installed and configured
-2. **kubectl** installed (v1.28+)
-3. **AWS credentials** with access to the EKS cluster
+2. **Session Manager Plugin** for AWS CLI
+3. **kubectl** installed (v1.28+)
+4. **AWS credentials** with access to the EKS cluster
 
 ```bash
 # Verify AWS CLI
 aws --version
 
+# Install Session Manager Plugin (macOS)
+brew install --cask session-manager-plugin
+
 # Verify kubectl
 kubectl version --client
 ```
 
-## Quick Start
+## Quick Start (Recommended)
 
-### Using the Deploy Script
+### Option A: Port Forwarding from Your Machine
 
-The easiest way to configure kubectl:
+Use this to work with kubectl from your local IDE/terminal:
 
 ```bash
-# For dev environment
-./scripts/deploy.sh dev kubeconfig
+# Terminal 1 - Start port forwarding (keep running)
+./scripts/eks-connect.sh dev forward
 
-# For hom (homologation) environment
-./scripts/deploy.sh hom kubeconfig
-
-# For prod environment
-./scripts/deploy.sh prod kubeconfig
+# Terminal 2 - Configure kubectl and use it
+./scripts/eks-connect.sh dev kubeconfig
+kubectl get nodes
 ```
 
-### Manual Configuration
+### Option B: Work Directly on Bastion
+
+Use this for quick operations or if port forwarding has issues:
 
 ```bash
-# Set your AWS profile
-export AWS_PROFILE=alm-yahoo-account
-export AWS_REGION=us-east-1
+# Connect to bastion
+./scripts/eks-connect.sh dev bastion
 
-# Update kubeconfig for dev cluster
-aws eks update-kubeconfig \
-  --name poc-eks-dev \
-  --region us-east-1 \
-  --profile alm-yahoo-account
-
-# Verify connection
-kubectl cluster-info
+# Once connected (inside bastion):
+aws eks update-kubeconfig --name poc-eks-dev --region us-east-1
 kubectl get nodes
 ```
 
 ## Cluster Details
 
-| Environment | Cluster Name    | Region    |
-|-------------|-----------------|-----------|
-| dev         | poc-eks-dev     | us-east-1 |
-| hom         | poc-eks-hom     | us-east-1 |
-| prod        | poc-eks-prod    | us-east-1 |
+| Environment | Cluster Name    | Region    | Endpoint |
+|-------------|-----------------|-----------|----------|
+| dev         | poc-eks-dev     | us-east-1 | Private  |
+| hom         | poc-eks-hom     | us-east-1 | Private  |
+| prod        | poc-eks-prod    | us-east-1 | Private  |
 
-## Accessing via Bastion Host
+## eks-connect.sh Reference
 
-For secure access from within the VPC, use the bastion host:
+The `eks-connect.sh` script provides all connection methods:
 
-### Via AWS Session Manager (Recommended)
+| Command | Description |
+|---------|-------------|
+| `./scripts/eks-connect.sh dev forward` | Start SSM port forwarding to EKS API |
+| `./scripts/eks-connect.sh dev bastion` | Connect directly to bastion via SSM |
+| `./scripts/eks-connect.sh dev kubeconfig` | Configure kubectl for localhost:6443 |
+| `./scripts/eks-connect.sh dev status` | Show cluster and bastion status |
 
-No SSH keys required - uses IAM authentication:
+### Environment Variables
+
+```bash
+export AWS_PROFILE=alm-yahoo-account  # AWS profile (default)
+export AWS_REGION=us-east-1           # AWS region (default)
+export LOCAL_PORT=6443                # Local port for forwarding (default)
+```
+
+### Full Workflow Example
+
+```bash
+# 1. Check status first
+./scripts/eks-connect.sh dev status
+
+# 2. Start port forwarding (Terminal 1 - keep open)
+./scripts/eks-connect.sh dev forward
+
+# 3. Configure kubectl (Terminal 2 - run once)
+./scripts/eks-connect.sh dev kubeconfig
+
+# 4. Use kubectl normally (Terminal 2)
+kubectl get nodes
+kubectl get pods -A
+kubectl logs -n kube-system -l k8s-app=kube-dns
+```
+
+## Manual Connection Methods
+
+### SSM Port Forwarding (Manual)
+
+If you prefer not to use the script:
+
+```bash
+# Get bastion instance ID
+BASTION_ID=$(aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=*bastion*" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[0].Instances[0].InstanceId' \
+  --output text \
+  --profile alm-yahoo-account \
+  --region us-east-1)
+
+# Get cluster endpoint
+ENDPOINT=$(aws eks describe-cluster \
+  --name poc-eks-dev \
+  --query 'cluster.endpoint' \
+  --output text \
+  --profile alm-yahoo-account \
+  --region us-east-1)
+
+# Start port forwarding
+aws ssm start-session \
+  --target $BASTION_ID \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters "{\"host\":[\"${ENDPOINT#https://}\"],\"portNumber\":[\"443\"],\"localPortNumber\":[\"6443\"]}" \
+  --profile alm-yahoo-account \
+  --region us-east-1
+```
+
+### Direct Bastion Connection (Manual)
 
 ```bash
 # Get bastion instance ID
@@ -78,15 +175,9 @@ BASTION_ID=$(aws ec2 describe-instances \
 
 # Connect via SSM
 aws ssm start-session --target $BASTION_ID --profile alm-yahoo-account --region us-east-1
-```
 
-Once connected to the bastion:
-
-```bash
-# Configure kubectl (on bastion)
+# Once connected to the bastion:
 aws eks update-kubeconfig --name poc-eks-dev --region us-east-1
-
-# Verify
 kubectl get nodes
 ```
 
@@ -112,6 +203,8 @@ ssh -i ~/.ssh/your-key.pem ec2-user@$BASTION_IP
 ### Check Cluster Status
 
 ```bash
+./scripts/eks-connect.sh dev status
+# or
 ./scripts/deploy.sh dev status
 ```
 
@@ -144,6 +237,7 @@ kubectl get events -A --sort-by='.lastTimestamp'
 ### Deploy Kong Gateway
 
 ```bash
+# Must have kubectl access first
 make kong-deploy ENVIRONMENT=dev
 ```
 
@@ -159,6 +253,36 @@ helm install my-release bitnami/nginx -n default
 
 ## Troubleshooting
 
+### Port Forwarding Not Working
+
+```bash
+# 1. Check bastion status
+./scripts/eks-connect.sh dev status
+
+# 2. Verify SSM agent is registered
+aws ssm describe-instance-information \
+  --profile alm-yahoo-account \
+  --region us-east-1
+
+# 3. If empty, the bastion may need a few minutes after boot
+#    or check if it has internet access (NAT Gateway)
+```
+
+### Certificate Errors with localhost
+
+When using port forwarding, you may see certificate errors because the EKS certificate is for the real endpoint, not localhost.
+
+**Solution**: Add `insecure-skip-tls-verify` to your kubeconfig:
+
+```bash
+# Edit ~/.kube/config and add under the cluster:
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true  # Add this line
+    server: https://localhost:6443
+  name: poc-eks-dev-local
+```
+
 ### "Unauthorized" Error
 
 ```bash
@@ -166,7 +290,20 @@ helm install my-release bitnami/nginx -n default
 aws sts get-caller-identity --profile alm-yahoo-account
 
 # Re-authenticate
-aws eks update-kubeconfig --name poc-eks-dev --region us-east-1 --profile alm-yahoo-account
+./scripts/eks-connect.sh dev kubeconfig
+```
+
+### Connection Refused on localhost:6443
+
+```bash
+# Make sure port forwarding is running in Terminal 1
+./scripts/eks-connect.sh dev forward
+
+# Check if something else is using port 6443
+lsof -i :6443
+
+# Use a different port if needed
+LOCAL_PORT=16443 ./scripts/eks-connect.sh dev forward
 ```
 
 ### Nodes Not Ready
@@ -178,7 +315,7 @@ kubectl describe nodes
 # Check kube-system pods
 kubectl get pods -n kube-system
 
-# Check VPC CNI
+# Check VPC CNI logs
 kubectl logs -n kube-system -l k8s-app=aws-node
 ```
 
@@ -191,25 +328,32 @@ aws ssm describe-instance-information \
   --profile alm-yahoo-account \
   --region us-east-1
 
-# If empty, wait 5 minutes after instance launch for agent to register
+# If empty:
+# - Wait 5 minutes after instance launch for agent to register
+# - Check bastion has internet access (NAT Gateway)
+# - Check bastion IAM role has SSM permissions
 ```
 
 ### Cannot Pull Images
 
 This usually means nodes don't have egress to ECR. Check:
+
 - NAT Gateway is running
 - Security group allows egress on port 443
 - Route table has 0.0.0.0/0 → NAT Gateway
 
 ## Security Notes
 
-1. **Never commit kubeconfig** - It's in `.gitignore`
-2. **Use SSM over SSH** - No exposed ports, IAM-based auth
-3. **Rotate credentials** - AWS tokens expire, refresh with `update-kubeconfig`
-4. **Least privilege** - Only grant necessary K8s RBAC permissions
+1. **Private endpoint only** - No direct internet access to EKS API
+2. **SSM over SSH** - No exposed ports, IAM-based authentication
+3. **Never commit kubeconfig** - It's in `.gitignore`
+4. **Rotate credentials** - AWS tokens expire, refresh with `update-kubeconfig`
+5. **Least privilege** - Only grant necessary K8s RBAC permissions
+6. **Bastion access** - All cluster access is auditable via SSM logs
 
 ## Additional Resources
 
 - [EKS User Guide](https://docs.aws.amazon.com/eks/latest/userguide/)
 - [kubectl Cheat Sheet](https://kubernetes.io/docs/reference/kubectl/cheatsheet/)
 - [AWS SSM Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html)
+- [EKS Private Cluster Access](https://docs.aws.amazon.com/eks/latest/userguide/cluster-endpoint.html)
